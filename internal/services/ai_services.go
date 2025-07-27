@@ -4,11 +4,7 @@ import (
 	"ai-routes-service/internal/models"
 	"ai-routes-service/internal/utils"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 
 	"google.golang.org/genai"
 )
@@ -22,65 +18,16 @@ type AIService struct {
 
 func NewAIService(apiKey string, model string, googleSearchKey string, googleSearchCX string) (*AIService, error) {
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey: apiKey,
-	})
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey})
 	if err != nil {
 		return nil, err
 	}
-
-	return &AIService{
-		Client:          client,
-		Model:           model,
-		GoogleSearchKey: googleSearchKey,
-		GoogleSearchCX:  googleSearchCX,
-	}, nil
-}
-
-func (s *AIService) performGoogleSearch(query string) (string, error) {
-	baseURL := "https://www.googleapis.com/customsearch/v1"
-	params := url.Values{}
-	params.Add("key", s.GoogleSearchKey)
-	params.Add("cx", s.GoogleSearchCX)
-	params.Add("q", query)
-	params.Add("num", "5") // Limit to 5 results
-
-	resp, err := http.Get(baseURL + "?" + params.Encode())
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var searchResult struct {
-		Items []struct {
-			Title   string `json:"title"`
-			Link    string `json:"link"`
-			Snippet string `json:"snippet"`
-		} `json:"items"`
-	}
-
-	if err := json.Unmarshal(body, &searchResult); err != nil {
-		return "", err
-	}
-
-	// Format results
-	result := "Search Results:\n"
-	for i, item := range searchResult.Items {
-		result += fmt.Sprintf("%d. %s\n   %s\n   %s\n\n", i+1, item.Title, item.Snippet, item.Link)
-	}
-
-	return result, nil
+	return &AIService{Client: client, Model: model, GoogleSearchKey: googleSearchKey, GoogleSearchCX: googleSearchCX}, nil
 }
 
 func (s *AIService) GenerateTripPlan(prompt models.PromptBody) (string, error) {
 	ctx := context.Background()
 
-	// Create a detailed user prompt that includes all the data
 	userPrompt := fmt.Sprintf(`
 Lütfen aşağıdaki bilgilere göre kamp rotası planla:
 
@@ -92,98 +39,111 @@ Bitiş Konumu: %s
 Başlangıç Tarihi: %s
 Bitiş Tarihi: %s
 
-Bu bilgileri kullanarak Türkiye içinde %s konumundan %s konumuna kadar %s tarihleri arasında bir kamp rotası planla. JSON formatında detaylı bir plan hazırla.
-`,
-		prompt.UserID,
-		prompt.Name,
-		prompt.Description,
-		prompt.StartPosition,
-		prompt.EndPosition,
-		prompt.StartDate,
-		prompt.EndDate,
-		prompt.StartPosition,
-		prompt.EndPosition,
-		prompt.StartDate+" - "+prompt.EndDate,
-	)
+Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse güncel bilgileri Google Search ile araştır. JSON olarak dön.
+`, prompt.UserID, prompt.Name, prompt.Description, prompt.StartPosition, prompt.EndPosition, prompt.StartDate, prompt.EndDate)
 
-	systemPrompt, err := utils.LoadPromptFromFile("system_prompt.txt")
+	systemPrompt, err := utils.LoadPromptFromFile("prompts/system_prompt.txt")
 	if err != nil {
 		return "", err
 	}
 
-	tools := []*genai.Tool{
-		{
-			FunctionDeclarations: []*genai.FunctionDeclaration{
-				{
-					Name:        "googleSearch",
-					Description: "A tool to perform a web search using Google Search.",
-					Parameters: &genai.Schema{
-						Type: genai.TypeObject,
-						Properties: map[string]*genai.Schema{
-							"query": {
-								Type:        genai.TypeString,
-								Description: "The search query for Google Search.",
-							},
+	googleSearchTool := genai.Tool{
+		FunctionDeclarations: []*genai.FunctionDeclaration{
+			{
+				Name:        "performGoogleSearch",
+				Description: "İnternetten bilgi aramak için kullanılır.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"query": {
+							Type:        genai.TypeString,
+							Description: "Google'da aranacak kelime.",
 						},
-						Required: []string{"query"},
 					},
+					Required: []string{"query"},
 				},
 			},
 		},
 	}
 
-	config := &genai.GenerateContentConfig{
+	generationConfig := &genai.GenerateContentConfig{
 		SystemInstruction: genai.Text(systemPrompt)[0],
-		Tools:             tools,
+		SafetySettings: []*genai.SafetySetting{
+			{Category: genai.HarmCategoryDangerousContent, Threshold: genai.HarmBlockThresholdBlockNone},
+			{Category: genai.HarmCategoryHarassment, Threshold: genai.HarmBlockThresholdBlockNone},
+			{Category: genai.HarmCategoryHateSpeech, Threshold: genai.HarmBlockThresholdBlockNone},
+			{Category: genai.HarmCategorySexuallyExplicit, Threshold: genai.HarmBlockThresholdBlockNone},
+		},
+		Tools: []*genai.Tool{&googleSearchTool},
 	}
 
-	result, err := s.Client.Models.GenerateContent(ctx, s.Model, genai.Text(userPrompt), config)
+	contents := []*genai.Content{
+		genai.NewContentFromText(userPrompt, genai.RoleUser),
+	}
+
+	resp, err := s.Client.Models.GenerateContent(ctx, s.Model, contents, generationConfig)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("gemini aPI hatası: %w", err)
 	}
+	fmt.Println("gemini:",resp)
 
-	// Handle function calls
 	for {
-		if len(result.Candidates) == 0 {
-			break
+		if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+			return "", fmt.Errorf("boş yanıt alındı.")
 		}
 
-		candidate := result.Candidates[0]
-		var functionResponses []*genai.Content
-		hasFunctionCalls := false
-
-		for _, part := range candidate.Content.Parts {
-			if fnCall := part.FunctionCall; fnCall != nil {
-				hasFunctionCalls = true
-
-				if fnCall.Name == "googleSearch" {
-					query, ok := fnCall.Args["query"].(string)
-					if !ok {
-						continue
-					}
-
-					searchResult, err := s.performGoogleSearch(query)
-					if err != nil {
-						searchResult = "Error performing search: " + err.Error()
-					}
-
-					functionResponses = append(functionResponses, genai.Text(searchResult)...)
+		var functionCallFound bool
+		for _, part := range resp.Candidates[0].Content.Parts {
+			fc := part.FunctionCall
+			if fc != nil && fc.Name == "performGoogleSearch" {
+				functionCallFound = true
+				query, ok := fc.Args["query"].(string)
+				if !ok {
+					return "", fmt.Errorf("geçersiz query parametresi")
 				}
+
+				searchResults, err := utils.PerformSearch(query, s.GoogleSearchKey, s.GoogleSearchCX)
+				var resultStr string
+				if err != nil || searchResults == nil || len(searchResults.Items) == 0 {
+					resultStr = fmt.Sprintf("Arama başarısız: %v", err)
+				} else {
+					for i, item := range searchResults.Items {
+						if i >= 3 {
+							break
+						}
+						resultStr += fmt.Sprintf("Title: %s\nLink: %s\nSnippet: %s\n\n", item.Title, item.Link, item.Snippet)
+					}
+				}
+
+				fmt.Println("search",searchResults)
+
+				contents = append(contents, &genai.Content{
+					Role: "function",
+					Parts: []*genai.Part{
+						{
+							FunctionResponse: &genai.FunctionResponse{
+								Name: "performGoogleSearch",
+								Response: map[string]any{
+									"result": resultStr,
+								},
+							},
+						},
+					},
+				})
+
+				fmt.Println("contents",contents)
+					
+				
+
+				resp, err = s.Client.Models.GenerateContent(ctx, s.Model, contents, generationConfig)
+				if err != nil {
+					return "", fmt.Errorf("gemini tool sonrası hata: %w", err)
+				}
+				break
 			}
 		}
-
-		if !hasFunctionCalls {
-			break
-		}
-
-		// Send function responses back to the model
-		if len(functionResponses) > 0 {
-			result, err = s.Client.Models.GenerateContent(ctx, s.Model, functionResponses, config)
-			if err != nil {
-				return "", err
-			}
+		if !functionCallFound {
+			return resp.Text(), nil
 		}
 	}
-
-	return result.Text(), nil
 }

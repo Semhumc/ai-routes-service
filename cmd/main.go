@@ -5,20 +5,18 @@ import (
 	"ai-routes-service/internal/routes"
 	"ai-routes-service/internal/services"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 var (
-	//ApiKey    = os.Getenv("API_KEY")
-	//ModelName = os.Getenv("MODEL_NAME")
-	//GoogleSearchKey = os.Getenv("GOOGLE_SEARCH_KEY")
-	//GoogleSearchCX = os.Getenv("GOOGLE_SEARCH_CX")
+	ApiKey    = os.Getenv("API_KEY")
+	ModelName = os.Getenv("MODEL_NAME")
+	GoogleSearchKey = os.Getenv("GOOGLE_SEARCH_KEY")
+	GoogleSearchCX = os.Getenv("GOOGLE_SEARCH_CX")
 
-	ApiKey          = "AIzaSyDoxoGFfrG8ndi-LSVLnl-iRJPjbRpcUUY"
-	ModelName       = "gemini-2.5-flash-lite-preview-06-17"
-	GoogleSearchKey = "AIzaSyBjPTWK9pkKdd5CB_TfY3FPpk6OA4hUk7g"
-	GoogleSearchCX  = "f5151badcb4504067"
+	
 )
 
 func main() {
