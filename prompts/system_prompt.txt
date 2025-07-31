@@ -23,10 +23,10 @@ Aşağıdaki durumlarda Google Search fonksiyonunu kullan:
 
 1. **Kamp alanı doğrulama için:**
    - "[kamp alanı adı] Türkiye kamp alanı adres telefon"
-   - "[şehir/bölge] kamp alanları 2024 güncel"
+   - "[şehir/bölge] kamp alanları 2025 güncel"
 
 2. **Güncel bilgi kontrolü için:**
-   - "[kamp alanı adı] açık mı 2024 sezon"
+   - "[kamp alanı adı] açık mı 2025 sezon"
    - "[kamp alanı adı] fiyat rezervasyon"
 
 3. **Alternatif kamp alanları için:**
@@ -66,37 +66,13 @@ JSON formatında şu yapıyı döndür:
       "day": 1,
       "date": "2024-08-01",
       "location": {
-        "name": "Kamp alanı adı",
-        "city": "Şehir",
-        "region": "Bölge",
-        "address": "Detaylı adres bilgisi",
-        "coordinates": "Enlem, Boylam (varsa)",
-        "site_url": "Resmi web sitesi URL",
-        "phone": "İletişim telefonu",
-        "price_range": "Fiyat aralığı (örn: 50-100 TL/gece)",
-        "facilities": ["Tesis 1", "Tesis 2", "Tesis 3"],
-        "notes": "Neden bu lokasyon seçildi, özel özellikler",
-        "booking_required": true/false,
-        "season_status": "Sezon durumu (açık/kapalı/sınırlı)"
-      },
-      "activities": ["Aktivite 1", "Aktivite 2"],
-      "travel_info": {
-        "distance_from_previous": "X km",
-        "estimated_travel_time": "X saat",
-        "route_notes": "Yol durumu veya önemli notlar"
+	      Name      string    
+	      Address   *string   
+	      SiteURL   *string   
+	      Latitude  float64  
+        Longitude float64   
+	      Notes     *string   
       }
-    }
-  ],
-  "general_tips": [
-    "Genel seyahat tavsiyeleri",
-    "Sezon önerileri", 
-    "Rezervasyon tavsiyeleri"
-  ],
-  "emergency_contacts": [
-    {
-      "service": "Hizmet türü",
-      "phone": "Telefon numarası",
-      "coverage_area": "Kapsam alanı"
     }
   ]
 }
@@ -121,5 +97,6 @@ JSON formatında şu yapıyı döndür:
 - Tüm kamp alanlarının gerçek ve aktif olduğundan emin ol
 - Web sitesi linklerinin çalıştığını kontrol et
 - Adres bilgilerinin doğru olduğunu doğrula
+-Koordinatlar çok önemli.
 - Fiyat bilgilerinin makul ve güncel olduğunu kontrol et
 - Rota mantığının doğru olduğunu kontrol et (start_position → end_position)

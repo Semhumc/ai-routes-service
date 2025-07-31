@@ -5,6 +5,7 @@ import (
 	"ai-routes-service/internal/utils"
 	"context"
 	"fmt"
+	
 
 	"google.golang.org/genai"
 )
@@ -85,7 +86,7 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 	if err != nil {
 		return "", fmt.Errorf("gemini aPI hatası: %w", err)
 	}
-	fmt.Println("gemini:",resp)
+	fmt.Println("gemini:", resp)
 
 	for {
 		if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
@@ -115,7 +116,7 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 					}
 				}
 
-				fmt.Println("search",searchResults)
+				fmt.Println("search", searchResults)
 
 				contents = append(contents, &genai.Content{
 					Role: "function",
@@ -131,9 +132,7 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 					},
 				})
 
-				fmt.Println("contents",contents)
-					
-				
+				fmt.Println("contents", contents)
 
 				resp, err = s.Client.Models.GenerateContent(ctx, s.Model, contents, generationConfig)
 				if err != nil {
