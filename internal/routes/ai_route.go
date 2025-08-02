@@ -5,6 +5,8 @@ import (
 	"ai-routes-service/internal/middleware"
 
 	"github.com/gofiber/fiber/v2"
+
+	
 )
 
 func AIRoute(router fiber.Router, aiHandler handler.AIHandlerInterface){
