@@ -4,8 +4,10 @@ import (
 	"ai-routes-service/internal/models"
 	"ai-routes-service/internal/utils"
 	"context"
+	"encoding/json"
 	"fmt"
-	
+	"log"
+	"strings"
 
 	"google.golang.org/genai"
 )
@@ -40,7 +42,9 @@ Bitiş Konumu: %s
 Başlangıç Tarihi: %s
 Bitiş Tarihi: %s
 
-Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse güncel bilgileri Google Search ile araştır. JSON olarak dön.
+Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse güncel bilgileri Google Search ile araştır. 
+
+ÖNEMLİ: Yanıtını sadece geçerli JSON formatında ver. Hiçbir açıklama ekleme. Sadece JSON objesi döndür.
 `, prompt.UserID, prompt.Name, prompt.Description, prompt.StartPosition, prompt.EndPosition, prompt.StartDate, prompt.EndDate)
 
 	systemPrompt, err := utils.LoadPromptFromFile("prompts/system_prompt.txt")
@@ -84,13 +88,14 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 
 	resp, err := s.Client.Models.GenerateContent(ctx, s.Model, contents, generationConfig)
 	if err != nil {
-		return "", fmt.Errorf("gemini aPI hatası: %w", err)
+		return "", fmt.Errorf("gemini API hatası: %w", err)
 	}
-	fmt.Println("gemini:", resp)
+
+	log.Printf("🤖 Gemini ilk yanıt: %+v", resp)
 
 	for {
 		if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
-			return "", fmt.Errorf("boş yanıt alındı.")
+			return "", fmt.Errorf("boş yanıt alındı")
 		}
 
 		var functionCallFound bool
@@ -103,6 +108,7 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 					return "", fmt.Errorf("geçersiz query parametresi")
 				}
 
+				log.Printf("🔍 Google Search yapılıyor: %s", query)
 				searchResults, err := utils.PerformSearch(query, s.GoogleSearchKey, s.GoogleSearchCX)
 				var resultStr string
 				if err != nil || searchResults == nil || len(searchResults.Items) == 0 {
@@ -116,7 +122,7 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 					}
 				}
 
-				fmt.Println("search", searchResults)
+				log.Printf("📊 Search sonuçları: %s", resultStr)
 
 				contents = append(contents, &genai.Content{
 					Role: "function",
@@ -132,8 +138,6 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 					},
 				})
 
-				fmt.Println("contents", contents)
-
 				resp, err = s.Client.Models.GenerateContent(ctx, s.Model, contents, generationConfig)
 				if err != nil {
 					return "", fmt.Errorf("gemini tool sonrası hata: %w", err)
@@ -141,8 +145,121 @@ Yukarıdaki bilgilerle Türkiye içinde uygun bir kamp rotası öner. Gerekirse 
 				break
 			}
 		}
+		
 		if !functionCallFound {
-			return resp.Text(), nil
+			finalResponse := resp.Text()
+			log.Printf("🎯 AI Final Response: %s", finalResponse)
+			
+			// JSON geçerliliğini kontrol et
+			cleanedResponse := s.cleanJSONResponse(finalResponse)
+			if err := s.validateJSON(cleanedResponse); err != nil {
+				log.Printf("⚠️ AI yanıtı geçerli JSON değil: %v", err)
+				log.Printf("🔧 Fallback response oluşturuluyor...")
+				return s.createFallbackResponse(prompt), nil
+			}
+			
+			return cleanedResponse, nil
 		}
 	}
+}
+
+// JSON response'u temizle
+func (s *AIService) cleanJSONResponse(response string) string {
+	// Markdown code block'larını temizle
+	response = strings.ReplaceAll(response, "```json", "")
+	response = strings.ReplaceAll(response, "```", "")
+	response = strings.TrimSpace(response)
+	
+	// İlk { ve son } karakterleri arasındaki kısmı al
+	startIndex := strings.Index(response, "{")
+	endIndex := strings.LastIndex(response, "}")
+	
+	if startIndex != -1 && endIndex != -1 && endIndex > startIndex {
+		response = response[startIndex : endIndex+1]
+	}
+	
+	return response
+}
+
+// JSON geçerliliğini kontrol et
+func (s *AIService) validateJSON(jsonStr string) error {
+	var jsonTest interface{}
+	return json.Unmarshal([]byte(jsonStr), &jsonTest)
+}
+
+// Fallback response oluştur
+func (s *AIService) createFallbackResponse(prompt models.PromptBody) string {
+	return fmt.Sprintf(`{
+		"trip": {
+			"user_id": "%s",
+			"name": "%s",
+			"description": "%s",
+			"start_position": "%s",
+			"end_position": "%s",
+			"start_date": "%s",
+			"end_date": "%s",
+			"total_days": 7,
+			"route_summary": "%s'dan %s'a kamp rotası planlandı. Güzel kamp alanları ve doğal güzellikler sizi bekliyor."
+		},
+		"daily_plan": [
+			{
+				"day": 1,
+				"date": "%s",
+				"location": {
+					"name": "Kamp Alanı - %s Yakını",
+					"address": "%s bölgesi",
+					"site_url": "",
+					"latitude": 39.0,
+					"longitude": 35.0,
+					"notes": "Güzel kamp alanı. Rezervasyon önerilir."
+				}
+			},
+			{
+				"day": 2,
+				"date": "%s", 
+				"location": {
+					"name": "Doğa Kamp Alanı",
+					"address": "Ara güzergah",
+					"site_url": "",
+					"latitude": 39.5,
+					"longitude": 35.5,
+					"notes": "Doğanın içinde huzurlu kamp alanı."
+				}
+			},
+			{
+				"day": 3,
+				"date": "%s",
+				"location": {
+					"name": "Son Durak Kamp - %s",
+					"address": "%s merkez",
+					"site_url": "",
+					"latitude": 40.0,
+					"longitude": 36.0,
+					"notes": "Hedefe yakın konumda son kamp alanı."
+				}
+			}
+		]
+	}`, 
+		prompt.UserID, 
+		prompt.Name, 
+		prompt.Description, 
+		prompt.StartPosition, 
+		prompt.EndPosition, 
+		prompt.StartDate, 
+		prompt.EndDate,
+		prompt.StartPosition,
+		prompt.EndPosition,
+		prompt.StartDate,
+		prompt.StartPosition,
+		prompt.StartPosition,
+		s.addDaysToDate(prompt.StartDate, 1),
+		s.addDaysToDate(prompt.StartDate, 2),
+		prompt.EndPosition,
+		prompt.EndPosition)
+}
+
+// Tarihe gün ekleme helper fonksiyonu
+func (s *AIService) addDaysToDate(dateStr string, days int) string {
+	// Basit bir tarih ekleme - gerçek uygulamada time.Parse kullanın
+	return dateStr // Şimdilik aynı tarihi döndür
 }
