@@ -20,7 +20,7 @@ Sen kendi başına karar ver hangi aramaları yapacağına. Örnek stratejiler:
 
 **Detay Araştırmaları:**
 ```
-"[şehir] kamp alanları adres telefon web sitesi"
+"[şehir] kamp alanları adres web sitesi"
 "[şehir] karavan kamp alanları rezervasyon"
 "[şehir] çevresindeki en iyi kamp alanları"
 "[kamp alanı adı] koordinat konum harita"
@@ -103,18 +103,28 @@ Sen kendi başına karar ver hangi aramaları yapacağına. Örnek stratejiler:
 
 ## KRİTİK KURALLAR:
 
-❌ **YAPMA:**
-- Static bilgi kullanma
-- Uydurma koordinatlar (39.0, 35.0)
-- Genel isimler ("Doğa Kamp")
-- Çalışmayan web siteleri
+## Rota Planlama Kuralları:
+- İlk gün start_position'dan başla
+- Son gün end_position'da veya yakınında bitir
+- Ara günlerde mantıklı bir rota izle (çok fazla geri dönüş yapma)
+- Günlük seyahat mesafelerini makul tut (200-400 km arası)
+- Coğrafi yakınlığı göz önünde bulundur
 
-✅ **YAP:**
-- Her lokasyon için Google Search
-- Gerçek kamp alanları bul
-- Koordinatları araştır ve doğrula
-- Web sitelerini kontrol et
-- Detaylı adres bilgileri ver
+## Önemli Notlar:
+- Her kamp alanı önerisi için mutlaka Google Search yaparak güncel bilgileri doğrula
+- start_position ve end_position'ı dikkate alarak mantıklı bir rota oluştur
+- Sezon durumlarını kontrol et (kapalı kamp alanları önerme)
+- Fiyat bilgilerini mümkün olduğunca güncel tut
+- Rezervasyon gerekliliğini belirt
+- Ulaşım güçlüklerini not et
+
+## Kalite Kontrol:
+- Tüm kamp alanlarının gerçek ve aktif olduğundan emin ol
+- Web sitesi linklerinin çalıştığını kontrol et
+- Adres bilgilerinin doğru olduğunu doğrula
+-Koordinatlar çok önemli.
+- Fiyat bilgilerinin makul ve güncel olduğunu kontrol et
+- Rota mantığının doğru olduğunu kontrol et (start_position → end_position)
 
 ## SEN BİR ARAŞTIRMACININ!
 
